@@ -1,0 +1,142 @@
+---
+title: "Practical Machine Learning-course Proj."
+author: "Ofori"
+date: "4 Dezember 2017"
+output: html_document
+---
+#Synopsis
+
+This report is based on the requirements for the Practical Machine Learning Course offered by Johns Hopkins Bloomberg School of Public Health and Coursera.
+
+In this project is based on data from accelerometers on the belt, forearm, arm, and dumbell of 6 research study participants. The training data consists of accelerometer data and a label identifying the quality of the activity the participant. The testing data consists of accelerometer data without the identifying label. 
+
+The aim is to select and build an optimal prediction model to predict 20 test cases in the course.
+
+#Loading Packages
+```{r,message=F, warning=F}
+library(readr);library(downloader);library(plyr)
+library(datasets);library(ggplot2);library(lattice);library(caret)
+library(randomForest)
+```
+
+#Downloading Dataset
+```{r setup, echo = TRUE}
+
+trUrl <-"https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+teUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+#Creating the needed files, if not existing to store dataset
+if (!file.exists("./dataML")) {
+  dir.create("./dataML")
+}
+
+if (!file.exists("./dataML/pml-training.csv")) {
+  download.file(trUrl, destfile="./dataML/pml-training.csv", method="auto")
+}
+
+if (!file.exists("./dataML/pml-testing.csv")) {
+  download.file(teUrl, destfile="./dataML/pml-testing.csv", method="auto")
+}
+```
+
+##Reading CSV Datasets and looking at the attributes
+```{r }
+
+trdata<-read.csv("./dataML/pml-training.csv")
+tedata<-read.csv("./dataML/pml-testing.csv")
+
+# Reading only the variables 
+names(trdata)
+
+#Attributess of both Training and Testing dataset
+str(trdata)
+str(tedata)
+```
+There are 19622 0bs and 160 variables in the  training dataset and 20 Obs and 160 variables in the Test datasets.
+
+#Using Valid Dataset to optimize modelling
+```{r }
+##Using the string function, it is clear most variables in the dataset contain invalid values such as NA's and blanks. 
+##These variables should be excluded from the model.
+#example: "trdata$$ amplitude_roll_dumbbell"
+summary(trdata$ amplitude_roll_dumbbell)
+
+#Excluding invalid variables to ease modelling
+purdata <- trdata[,-c(grep("^amplitude|^kurtosis|^skewness|^avg|^cvtd_timestamp|^max|^min|^new_window|^raw_timestamp|^stddev|^var|^user_name|X",names(trdata)))]
+paste("Complete Cases:")
+
+#Checking to see, if purdata is tidy
+table(complete.cases(purdata))
+
+```
+
+#Splitting  the valid training dataset:
+
+The tidy data will be partition into two sets, 70% for training and 30% for testing.
+
+```{r}
+
+intrdata<-createDataPartition(y=purdata$classe, p=0.7,list=FALSE)
+training<-purdata[intrdata,]
+testing<-purdata[-intrdata,]
+
+dim(training);dim(testing)
+```
+
+The Training dataset has now 13737 obs and 54 variable which is going to be used for the prediction.
+
+
+#Model Selection
+
+### Model Comparison
+The best alogrithm  for the model using the "purdatase" is determined by comparison, based on the Random Forest model fitting algorithm. 
+The Kappa value is selected as the comparison criteria.
+
+#Fitting Model- Random Forest
+
+##Cross validation
+
+```{r}
+set.seed(123)
+modFit <- randomForest(classe~., data=training)
+print(modFit)
+
+##cross validation on my traininging data
+prdtrain <- predict(modFit, training, type = "class")
+confusionMatrix(training$classe, prdtrain)
+
+##cross validation on my testing data
+##out of sample error
+predict1 <- predict(modFit, testing, type = "class")
+confusionMatrix(testing$classe, predict1)
+
+```
+
+
+According to both model summaries (see above), running the model on the training data for cross validation, gives an 
+accuracy of 100% that, which can be assumed as the sample error.
+The same model fitted to the test data  shows 99.8% accuracy, which can be assume as the sample error. 
+
+#Final model testing
+
+###The model is finally tested on the test dataset and writting predictions to Files
+
+```{r}
+prdFinal <- predict(modFit, tedata, type = "class")
+print(prdFinal)
+
+# convert predictions to character vector
+prdFinal <- as.character(prdFinal)
+
+# create function to write predictions to files
+pml_write_files <- function(x) {
+    n <- length(x)
+    for(i in 1:n) {
+        filename <- paste0("problem_id_", i, ".txt")
+        write.table(x[i], file=filename, quote=F, row.names=F, col.names=F)
+    }
+}
+
+# create prediction files to submit
+pml_write_files(prdFinal)
+```
